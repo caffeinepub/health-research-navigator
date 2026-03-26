@@ -1,0 +1,57 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Navy/blue clinical palette in OKLCH */
+    --background: 97 0.008 220;
+    --foreground: 20 0.03 240;
+
+    --card: 100 0 0;
+    --card-foreground: 20 0.03 240;
+
+    --popover: 100 0 0;
+    --popover-foreground: 20 0.03 240;
+
+    /* Primary: #2F6FA6 → ~OKLCH 0.49 0.11 240 */
+    --primary: 49 0.11 240;
+    --primary-foreground: 100 0 0;
+
+    /* Secondary: lighter blue */
+    --secondary: 92 0.04 230;
+    --secondary-foreground: 35 0.08 240;
+
+    --muted: 95 0.01 220;
+    --muted-foreground: 52 0.04 240;
+
+    --accent: 88 0.06 230;
+    --accent-foreground: 35 0.08 240;
+
+    --destructive: 50 0.2 25;
+    --destructive-foreground: 100 0 0;
+
+    --border: 88 0.03 225;
+    --input: 88 0.03 225;
+    --ring: 49 0.11 240;
+
+    /* Navy: #1E3A5F */
+    --navy: 28 0.09 255;
+    --navy-foreground: 100 0 0;
+
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+}
