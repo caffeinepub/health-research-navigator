@@ -8,14 +8,42 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const ResearchSession = IDL.Record({
+export const ResearchQuestion = IDL.Record({
+  'text' : IDL.Text,
+  'framework' : IDL.Text,
+  'rationale' : IDL.Text,
+});
+export const GapFramework = IDL.Record({
+  'frameworkType' : IDL.Text,
+  'details' : IDL.Text,
+});
+export const Study = IDL.Record({
   'id' : IDL.Nat,
-  'whatIsKnown' : IDL.Text,
-  'whatIsContested' : IDL.Text,
-  'timestamp' : IDL.Int,
+  'doi' : IDL.Text,
+  'title' : IDL.Text,
+  'source' : IDL.Text,
+  'journal' : IDL.Text,
+  'year' : IDL.Nat,
+  'gapFramework' : IDL.Opt(GapFramework),
+  'volume' : IDL.Text,
+  'researchGaps' : IDL.Text,
+  'authors' : IDL.Vec(IDL.Text),
+  'abstract' : IDL.Text,
+  'pages' : IDL.Text,
+  'keyFindings' : IDL.Text,
+});
+export const SynthesisTable = IDL.Record({
+  'generatedAt' : IDL.Int,
+  'studies' : IDL.Vec(Study),
+  'sessionId' : IDL.Nat,
+});
+export const SearchSession = IDL.Record({
+  'id' : IDL.Nat,
+  'selectedStudies' : IDL.Vec(Study),
+  'createdAt' : IDL.Int,
+  'researchQuestions' : IDL.Vec(ResearchQuestion),
+  'synthesisTable' : IDL.Opt(SynthesisTable),
   'broadArea' : IDL.Text,
-  'proposedGap' : IDL.Text,
-  'whatIsMissing' : IDL.Text,
 });
 export const http_header = IDL.Record({
   'value' : IDL.Text,
@@ -37,15 +65,33 @@ export const TransformationOutput = IDL.Record({
 });
 
 export const idlService = IDL.Service({
+  'addResearchQuestion' : IDL.Func([IDL.Nat, ResearchQuestion], [], []),
+  'addStudy' : IDL.Func([IDL.Nat, Study], [IDL.Nat], []),
+  'createSession' : IDL.Func([IDL.Text], [IDL.Nat], []),
   'deleteSession' : IDL.Func([IDL.Nat], [], []),
   'fetchPubMedArticles' : IDL.Func([IDL.Text], [IDL.Text], []),
-  'getAllSessions' : IDL.Func([], [IDL.Vec(ResearchSession)], ['query']),
-  'saveSession' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+  'getAllSessions' : IDL.Func([], [IDL.Vec(SearchSession)], ['query']),
+  'getResearchQuestions' : IDL.Func(
       [IDL.Nat],
-      [],
+      [IDL.Vec(ResearchQuestion)],
+      ['query'],
     ),
+  'getSession' : IDL.Func([IDL.Nat], [IDL.Opt(SearchSession)], ['query']),
+  'getStudies' : IDL.Func([IDL.Nat], [IDL.Vec(Study)], ['query']),
+  'getStudiesByFramework' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Vec(Study)],
+      ['query'],
+    ),
+  'getStudy' : IDL.Func([IDL.Nat, IDL.Nat], [IDL.Opt(Study)], ['query']),
+  'getSynthesisTable' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Opt(SynthesisTable)],
+      ['query'],
+    ),
+  'saveSynthesisTable' : IDL.Func([IDL.Nat, IDL.Vec(Study)], [], []),
   'searchPubMed' : IDL.Func([IDL.Text], [IDL.Text], []),
+  'searchStudies' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Vec(Study)], ['query']),
   'transform' : IDL.Func(
       [TransformationInput],
       [TransformationOutput],
@@ -56,14 +102,42 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const ResearchSession = IDL.Record({
+  const ResearchQuestion = IDL.Record({
+    'text' : IDL.Text,
+    'framework' : IDL.Text,
+    'rationale' : IDL.Text,
+  });
+  const GapFramework = IDL.Record({
+    'frameworkType' : IDL.Text,
+    'details' : IDL.Text,
+  });
+  const Study = IDL.Record({
     'id' : IDL.Nat,
-    'whatIsKnown' : IDL.Text,
-    'whatIsContested' : IDL.Text,
-    'timestamp' : IDL.Int,
+    'doi' : IDL.Text,
+    'title' : IDL.Text,
+    'source' : IDL.Text,
+    'journal' : IDL.Text,
+    'year' : IDL.Nat,
+    'gapFramework' : IDL.Opt(GapFramework),
+    'volume' : IDL.Text,
+    'researchGaps' : IDL.Text,
+    'authors' : IDL.Vec(IDL.Text),
+    'abstract' : IDL.Text,
+    'pages' : IDL.Text,
+    'keyFindings' : IDL.Text,
+  });
+  const SynthesisTable = IDL.Record({
+    'generatedAt' : IDL.Int,
+    'studies' : IDL.Vec(Study),
+    'sessionId' : IDL.Nat,
+  });
+  const SearchSession = IDL.Record({
+    'id' : IDL.Nat,
+    'selectedStudies' : IDL.Vec(Study),
+    'createdAt' : IDL.Int,
+    'researchQuestions' : IDL.Vec(ResearchQuestion),
+    'synthesisTable' : IDL.Opt(SynthesisTable),
     'broadArea' : IDL.Text,
-    'proposedGap' : IDL.Text,
-    'whatIsMissing' : IDL.Text,
   });
   const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
   const http_request_result = IDL.Record({
@@ -82,15 +156,37 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    'addResearchQuestion' : IDL.Func([IDL.Nat, ResearchQuestion], [], []),
+    'addStudy' : IDL.Func([IDL.Nat, Study], [IDL.Nat], []),
+    'createSession' : IDL.Func([IDL.Text], [IDL.Nat], []),
     'deleteSession' : IDL.Func([IDL.Nat], [], []),
     'fetchPubMedArticles' : IDL.Func([IDL.Text], [IDL.Text], []),
-    'getAllSessions' : IDL.Func([], [IDL.Vec(ResearchSession)], ['query']),
-    'saveSession' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+    'getAllSessions' : IDL.Func([], [IDL.Vec(SearchSession)], ['query']),
+    'getResearchQuestions' : IDL.Func(
         [IDL.Nat],
-        [],
+        [IDL.Vec(ResearchQuestion)],
+        ['query'],
       ),
+    'getSession' : IDL.Func([IDL.Nat], [IDL.Opt(SearchSession)], ['query']),
+    'getStudies' : IDL.Func([IDL.Nat], [IDL.Vec(Study)], ['query']),
+    'getStudiesByFramework' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Vec(Study)],
+        ['query'],
+      ),
+    'getStudy' : IDL.Func([IDL.Nat, IDL.Nat], [IDL.Opt(Study)], ['query']),
+    'getSynthesisTable' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Opt(SynthesisTable)],
+        ['query'],
+      ),
+    'saveSynthesisTable' : IDL.Func([IDL.Nat, IDL.Vec(Study)], [], []),
     'searchPubMed' : IDL.Func([IDL.Text], [IDL.Text], []),
+    'searchStudies' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Vec(Study)],
+        ['query'],
+      ),
     'transform' : IDL.Func(
         [TransformationInput],
         [TransformationOutput],

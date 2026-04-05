@@ -10,14 +10,39 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface ResearchSession {
+export interface GapFramework { 'frameworkType' : string, 'details' : string }
+export interface ResearchQuestion {
+  'text' : string,
+  'framework' : string,
+  'rationale' : string,
+}
+export interface SearchSession {
   'id' : bigint,
-  'whatIsKnown' : string,
-  'whatIsContested' : string,
-  'timestamp' : bigint,
+  'selectedStudies' : Array<Study>,
+  'createdAt' : bigint,
+  'researchQuestions' : Array<ResearchQuestion>,
+  'synthesisTable' : [] | [SynthesisTable],
   'broadArea' : string,
-  'proposedGap' : string,
-  'whatIsMissing' : string,
+}
+export interface Study {
+  'id' : bigint,
+  'doi' : string,
+  'title' : string,
+  'source' : string,
+  'journal' : string,
+  'year' : bigint,
+  'gapFramework' : [] | [GapFramework],
+  'volume' : string,
+  'researchGaps' : string,
+  'authors' : Array<string>,
+  'abstract' : string,
+  'pages' : string,
+  'keyFindings' : string,
+}
+export interface SynthesisTable {
+  'generatedAt' : bigint,
+  'studies' : Array<Study>,
+  'sessionId' : bigint,
 }
 export interface TransformationInput {
   'context' : Uint8Array,
@@ -35,11 +60,21 @@ export interface http_request_result {
   'headers' : Array<http_header>,
 }
 export interface _SERVICE {
+  'addResearchQuestion' : ActorMethod<[bigint, ResearchQuestion], undefined>,
+  'addStudy' : ActorMethod<[bigint, Study], bigint>,
+  'createSession' : ActorMethod<[string], bigint>,
   'deleteSession' : ActorMethod<[bigint], undefined>,
   'fetchPubMedArticles' : ActorMethod<[string], string>,
-  'getAllSessions' : ActorMethod<[], Array<ResearchSession>>,
-  'saveSession' : ActorMethod<[string, string, string, string, string], bigint>,
+  'getAllSessions' : ActorMethod<[], Array<SearchSession>>,
+  'getResearchQuestions' : ActorMethod<[bigint], Array<ResearchQuestion>>,
+  'getSession' : ActorMethod<[bigint], [] | [SearchSession]>,
+  'getStudies' : ActorMethod<[bigint], Array<Study>>,
+  'getStudiesByFramework' : ActorMethod<[bigint, string], Array<Study>>,
+  'getStudy' : ActorMethod<[bigint, bigint], [] | [Study]>,
+  'getSynthesisTable' : ActorMethod<[bigint], [] | [SynthesisTable]>,
+  'saveSynthesisTable' : ActorMethod<[bigint, Array<Study>], undefined>,
   'searchPubMed' : ActorMethod<[string], string>,
+  'searchStudies' : ActorMethod<[bigint, string], Array<Study>>,
   'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
 }
 export declare const idlService: IDL.ServiceClass;

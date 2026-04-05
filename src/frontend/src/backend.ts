@@ -89,23 +89,51 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface TransformationInput {
-    context: Uint8Array;
-    response: http_request_result;
-}
-export interface ResearchSession {
+export interface SearchSession {
     id: bigint;
-    whatIsKnown: string;
-    whatIsContested: string;
-    timestamp: bigint;
+    selectedStudies: Array<Study>;
+    createdAt: bigint;
+    researchQuestions: Array<ResearchQuestion>;
+    synthesisTable?: SynthesisTable;
     broadArea: string;
-    proposedGap: string;
-    whatIsMissing: string;
 }
 export interface TransformationOutput {
     status: bigint;
     body: Uint8Array;
     headers: Array<http_header>;
+}
+export interface TransformationInput {
+    context: Uint8Array;
+    response: http_request_result;
+}
+export interface SynthesisTable {
+    generatedAt: bigint;
+    studies: Array<Study>;
+    sessionId: bigint;
+}
+export interface Study {
+    id: bigint;
+    doi: string;
+    title: string;
+    source: string;
+    journal: string;
+    year: bigint;
+    gapFramework?: GapFramework;
+    volume: string;
+    researchGaps: string;
+    authors: Array<string>;
+    abstract: string;
+    pages: string;
+    keyFindings: string;
+}
+export interface ResearchQuestion {
+    text: string;
+    framework: string;
+    rationale: string;
+}
+export interface GapFramework {
+    frameworkType: string;
+    details: string;
 }
 export interface http_header {
     value: string;
@@ -117,15 +145,68 @@ export interface http_request_result {
     headers: Array<http_header>;
 }
 export interface backendInterface {
+    addResearchQuestion(sessionId: bigint, question: ResearchQuestion): Promise<void>;
+    addStudy(sessionId: bigint, study: Study): Promise<bigint>;
+    createSession(broadArea: string): Promise<bigint>;
     deleteSession(id: bigint): Promise<void>;
     fetchPubMedArticles(ids: string): Promise<string>;
-    getAllSessions(): Promise<Array<ResearchSession>>;
-    saveSession(broadArea: string, whatIsKnown: string, whatIsContested: string, whatIsMissing: string, proposedGap: string): Promise<bigint>;
+    getAllSessions(): Promise<Array<SearchSession>>;
+    getResearchQuestions(sessionId: bigint): Promise<Array<ResearchQuestion>>;
+    getSession(id: bigint): Promise<SearchSession | null>;
+    getStudies(sessionId: bigint): Promise<Array<Study>>;
+    getStudiesByFramework(sessionId: bigint, framework: string): Promise<Array<Study>>;
+    getStudy(sessionId: bigint, studyId: bigint): Promise<Study | null>;
+    getSynthesisTable(sessionId: bigint): Promise<SynthesisTable | null>;
+    saveSynthesisTable(sessionId: bigint, studies: Array<Study>): Promise<void>;
     searchPubMed(searchQuery: string): Promise<string>;
+    searchStudies(sessionId: bigint, searchTerm: string): Promise<Array<Study>>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
 }
+import type { GapFramework as _GapFramework, ResearchQuestion as _ResearchQuestion, SearchSession as _SearchSession, Study as _Study, SynthesisTable as _SynthesisTable } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async addResearchQuestion(arg0: bigint, arg1: ResearchQuestion): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addResearchQuestion(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addResearchQuestion(arg0, arg1);
+            return result;
+        }
+    }
+    async addStudy(arg0: bigint, arg1: Study): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addStudy(arg0, to_candid_Study_n1(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addStudy(arg0, to_candid_Study_n1(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async createSession(arg0: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createSession(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createSession(arg0);
+            return result;
+        }
+    }
     async deleteSession(arg0: bigint): Promise<void> {
         if (this.processError) {
             try {
@@ -154,31 +235,115 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getAllSessions(): Promise<Array<ResearchSession>> {
+    async getAllSessions(): Promise<Array<SearchSession>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAllSessions();
-                return result;
+                return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getAllSessions();
-            return result;
+            return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
         }
     }
-    async saveSession(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<bigint> {
+    async getResearchQuestions(arg0: bigint): Promise<Array<ResearchQuestion>> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveSession(arg0, arg1, arg2, arg3, arg4);
+                const result = await this.actor.getResearchQuestions(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveSession(arg0, arg1, arg2, arg3, arg4);
+            const result = await this.actor.getResearchQuestions(arg0);
+            return result;
+        }
+    }
+    async getSession(arg0: bigint): Promise<SearchSession | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSession(arg0);
+                return from_candid_opt_n13(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSession(arg0);
+            return from_candid_opt_n13(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getStudies(arg0: bigint): Promise<Array<Study>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStudies(arg0);
+                return from_candid_vec_n6(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStudies(arg0);
+            return from_candid_vec_n6(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getStudiesByFramework(arg0: bigint, arg1: string): Promise<Array<Study>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStudiesByFramework(arg0, arg1);
+                return from_candid_vec_n6(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStudiesByFramework(arg0, arg1);
+            return from_candid_vec_n6(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getStudy(arg0: bigint, arg1: bigint): Promise<Study | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStudy(arg0, arg1);
+                return from_candid_opt_n14(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStudy(arg0, arg1);
+            return from_candid_opt_n14(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getSynthesisTable(arg0: bigint): Promise<SynthesisTable | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSynthesisTable(arg0);
+                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSynthesisTable(arg0);
+            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async saveSynthesisTable(arg0: bigint, arg1: Array<Study>): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveSynthesisTable(arg0, to_candid_vec_n15(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveSynthesisTable(arg0, to_candid_vec_n15(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -196,6 +361,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async searchStudies(arg0: bigint, arg1: string): Promise<Array<Study>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.searchStudies(arg0, arg1);
+                return from_candid_vec_n6(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.searchStudies(arg0, arg1);
+            return from_candid_vec_n6(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async transform(arg0: TransformationInput): Promise<TransformationOutput> {
         if (this.processError) {
             try {
@@ -210,6 +389,168 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+}
+function from_candid_SearchSession_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _SearchSession): SearchSession {
+    return from_candid_record_n5(_uploadFile, _downloadFile, value);
+}
+function from_candid_Study_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Study): Study {
+    return from_candid_record_n8(_uploadFile, _downloadFile, value);
+}
+function from_candid_SynthesisTable_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _SynthesisTable): SynthesisTable {
+    return from_candid_record_n12(_uploadFile, _downloadFile, value);
+}
+function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_SynthesisTable]): SynthesisTable | null {
+    return value.length === 0 ? null : from_candid_SynthesisTable_n11(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_opt_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_SearchSession]): SearchSession | null {
+    return value.length === 0 ? null : from_candid_SearchSession_n4(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_opt_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Study]): Study | null {
+    return value.length === 0 ? null : from_candid_Study_n7(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_GapFramework]): GapFramework | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    generatedAt: bigint;
+    studies: Array<_Study>;
+    sessionId: bigint;
+}): {
+    generatedAt: bigint;
+    studies: Array<Study>;
+    sessionId: bigint;
+} {
+    return {
+        generatedAt: value.generatedAt,
+        studies: from_candid_vec_n6(_uploadFile, _downloadFile, value.studies),
+        sessionId: value.sessionId
+    };
+}
+function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    selectedStudies: Array<_Study>;
+    createdAt: bigint;
+    researchQuestions: Array<_ResearchQuestion>;
+    synthesisTable: [] | [_SynthesisTable];
+    broadArea: string;
+}): {
+    id: bigint;
+    selectedStudies: Array<Study>;
+    createdAt: bigint;
+    researchQuestions: Array<ResearchQuestion>;
+    synthesisTable?: SynthesisTable;
+    broadArea: string;
+} {
+    return {
+        id: value.id,
+        selectedStudies: from_candid_vec_n6(_uploadFile, _downloadFile, value.selectedStudies),
+        createdAt: value.createdAt,
+        researchQuestions: value.researchQuestions,
+        synthesisTable: record_opt_to_undefined(from_candid_opt_n10(_uploadFile, _downloadFile, value.synthesisTable)),
+        broadArea: value.broadArea
+    };
+}
+function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    doi: string;
+    title: string;
+    source: string;
+    journal: string;
+    year: bigint;
+    gapFramework: [] | [_GapFramework];
+    volume: string;
+    researchGaps: string;
+    authors: Array<string>;
+    abstract: string;
+    pages: string;
+    keyFindings: string;
+}): {
+    id: bigint;
+    doi: string;
+    title: string;
+    source: string;
+    journal: string;
+    year: bigint;
+    gapFramework?: GapFramework;
+    volume: string;
+    researchGaps: string;
+    authors: Array<string>;
+    abstract: string;
+    pages: string;
+    keyFindings: string;
+} {
+    return {
+        id: value.id,
+        doi: value.doi,
+        title: value.title,
+        source: value.source,
+        journal: value.journal,
+        year: value.year,
+        gapFramework: record_opt_to_undefined(from_candid_opt_n9(_uploadFile, _downloadFile, value.gapFramework)),
+        volume: value.volume,
+        researchGaps: value.researchGaps,
+        authors: value.authors,
+        abstract: value.abstract,
+        pages: value.pages,
+        keyFindings: value.keyFindings
+    };
+}
+function from_candid_vec_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_SearchSession>): Array<SearchSession> {
+    return value.map((x)=>from_candid_SearchSession_n4(_uploadFile, _downloadFile, x));
+}
+function from_candid_vec_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Study>): Array<Study> {
+    return value.map((x)=>from_candid_Study_n7(_uploadFile, _downloadFile, x));
+}
+function to_candid_Study_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Study): _Study {
+    return to_candid_record_n2(_uploadFile, _downloadFile, value);
+}
+function to_candid_record_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    doi: string;
+    title: string;
+    source: string;
+    journal: string;
+    year: bigint;
+    gapFramework?: GapFramework;
+    volume: string;
+    researchGaps: string;
+    authors: Array<string>;
+    abstract: string;
+    pages: string;
+    keyFindings: string;
+}): {
+    id: bigint;
+    doi: string;
+    title: string;
+    source: string;
+    journal: string;
+    year: bigint;
+    gapFramework: [] | [_GapFramework];
+    volume: string;
+    researchGaps: string;
+    authors: Array<string>;
+    abstract: string;
+    pages: string;
+    keyFindings: string;
+} {
+    return {
+        id: value.id,
+        doi: value.doi,
+        title: value.title,
+        source: value.source,
+        journal: value.journal,
+        year: value.year,
+        gapFramework: value.gapFramework ? candid_some(value.gapFramework) : candid_none(),
+        volume: value.volume,
+        researchGaps: value.researchGaps,
+        authors: value.authors,
+        abstract: value.abstract,
+        pages: value.pages,
+        keyFindings: value.keyFindings
+    };
+}
+function to_candid_vec_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<Study>): Array<_Study> {
+    return value.map((x)=>to_candid_Study_n1(_uploadFile, _downloadFile, x));
 }
 export interface CreateActorOptions {
     agent?: Agent;
