@@ -433,3 +433,123 @@ export function generateResearchQuestions(
 
   return questions.slice(0, 4);
 }
+
+// ── Deduplication ──────────────────────────────────────────────────────────────────
+
+// Source priority order for deduplication (keep highest-priority source)
+const SOURCE_PRIORITY = [
+  "pubmed",
+  "europepmc",
+  "europe pmc",
+  "semanticscholar",
+  "semantic scholar",
+  "consensus",
+  "openalex",
+  "arxiv",
+  "eric",
+  "googlescholar",
+  "google scholar",
+  "shodhganga",
+];
+
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourcePriority(source: string): number {
+  const s = source.toLowerCase();
+  const idx = SOURCE_PRIORITY.findIndex((p) => s.includes(p));
+  return idx === -1 ? 999 : idx;
+}
+
+export interface DeduplicationResult {
+  studies: Study[];
+  duplicatesRemoved: number;
+  duplicateDetails: { title: string; sources: string[] }[];
+}
+
+export function deduplicateStudies(studies: Study[]): DeduplicationResult {
+  const doiMap = new Map<string, Study>();
+  const titleMap = new Map<string, Study>();
+  const mergedSources = new Map<string, Set<string>>();
+  const duplicates: { title: string; sources: string[] }[] = [];
+
+  // First pass: build maps preferring higher-priority sources
+  for (const study of studies) {
+    const doi = study.doi?.trim().toLowerCase();
+    const normTitle = normalizeTitle(study.title);
+
+    let existingStudy: Study | null = null;
+
+    if (doi && doi.length > 5) {
+      existingStudy = doiMap.get(doi) ?? null;
+    }
+
+    if (!existingStudy && normTitle.length > 10) {
+      existingStudy = titleMap.get(normTitle) ?? null;
+    }
+
+    if (existingStudy) {
+      // It's a duplicate — merge sources
+      const setKey = existingStudy.id;
+      if (!mergedSources.has(setKey)) {
+        mergedSources.set(setKey, new Set([existingStudy.source]));
+      }
+      mergedSources.get(setKey)!.add(study.source);
+
+      duplicates.push({
+        title: study.title,
+        sources: Array.from(mergedSources.get(setKey)!),
+      });
+
+      // If current study has higher priority source, replace it
+      if (sourcePriority(study.source) < sourcePriority(existingStudy.source)) {
+        const newStudy = { ...study };
+        if (doi && doi.length > 5) doiMap.set(doi, newStudy);
+        if (normTitle.length > 10) titleMap.set(normTitle, newStudy);
+        const sources = mergedSources.get(setKey)!;
+        mergedSources.delete(setKey);
+        mergedSources.set(newStudy.id, sources);
+      }
+    } else {
+      // New unique study
+      if (doi && doi.length > 5) doiMap.set(doi, study);
+      if (normTitle.length > 10) titleMap.set(normTitle, study);
+    }
+  }
+
+  // Collect unique studies
+  const seenIds = new Set<string>();
+  const unique: Study[] = [];
+
+  for (const study of studies) {
+    const doi = study.doi?.trim().toLowerCase();
+    const normTitle = normalizeTitle(study.title);
+
+    let canonical: Study | null = null;
+    if (doi && doi.length > 5) canonical = doiMap.get(doi) ?? null;
+    if (!canonical && normTitle.length > 10)
+      canonical = titleMap.get(normTitle) ?? null;
+    if (!canonical) canonical = study;
+
+    if (!seenIds.has(canonical.id)) {
+      seenIds.add(canonical.id);
+      const sources = mergedSources.get(canonical.id);
+      if (sources && sources.size > 1) {
+        unique.push({ ...canonical, source: Array.from(sources).join(", ") });
+      } else {
+        unique.push(canonical);
+      }
+    }
+  }
+
+  return {
+    studies: unique,
+    duplicatesRemoved: studies.length - unique.length,
+    duplicateDetails: duplicates,
+  };
+}

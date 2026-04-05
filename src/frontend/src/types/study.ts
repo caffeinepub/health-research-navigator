@@ -46,7 +46,8 @@ export type DatabaseName =
   | "arxiv"
   | "eric"
   | "googleScholar"
-  | "shodhganga";
+  | "shodhganga"
+  | "consensus";
 
 export interface SearchResults {
   pubmed: Study[];
@@ -57,6 +58,7 @@ export interface SearchResults {
   eric: Study[];
   googleScholar: Study[];
   shodhganga: Study[];
+  consensus: Study[];
 }
 
 export interface DatabaseStatus {
@@ -68,4 +70,5 @@ export interface DatabaseStatus {
   eric: "idle" | "loading" | "success" | "error";
   googleScholar: "idle" | "loading" | "success" | "error";
   shodhganga: "idle" | "loading" | "success" | "error";
+  consensus: "idle" | "loading" | "success" | "error";
 }

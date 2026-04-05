@@ -516,3 +516,74 @@ export async function fetchShodhganga(
     };
   });
 }
+
+// ─── Consensus (via Semantic Scholar Medicine filter) ─────────────────────────
+// Consensus.app has no public API. It surfaces peer-reviewed papers from
+// PubMed, Semantic Scholar and similar sources. We query Semantic Scholar
+// with fieldsOfStudy=Medicine to mirror Consensus's evidence-based focus.
+// A direct link to consensus.app is shown in the panel header for the user.
+export async function fetchConsensus(
+  query: string,
+  yearFrom?: string,
+  yearTo?: string,
+): Promise<Study[]> {
+  const enc = encodeURIComponent(query);
+  const yearFilter = yearFrom
+    ? `&year=${yearFrom}-${yearTo || new Date().getFullYear()}`
+    : "";
+  const apiUrl = `https://api.semanticscholar.org/graph/v1/paper/search?query=${enc}&limit=100&fields=title,authors,year,venue,abstract,externalIds&fieldsOfStudy=Medicine${yearFilter}`;
+
+  const tryFetch = async (attempt: number): Promise<Response | null> => {
+    try {
+      const res = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(25000),
+        headers: { Accept: "application/json" },
+      });
+      if (res.status === 429 && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        return tryFetch(attempt + 1);
+      }
+      return res;
+    } catch {
+      return null;
+    }
+  };
+
+  let data: any = null;
+  const res = await tryFetch(1);
+  if (res?.ok) {
+    try {
+      data = await res.json();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!data?.data?.length) {
+    try {
+      data = await fetchJsonViaProxy(apiUrl);
+    } catch {
+      console.warn("Consensus (via Semantic Scholar): all methods failed");
+      return [];
+    }
+  }
+
+  const papers = data?.data || [];
+  return papers.map((p: any) => {
+    const abstract = p.abstract || "";
+    return {
+      id: `consensus-${p.paperId || uid()}`,
+      title: p.title || "No title",
+      authors: (p.authors || []).map((a: { name: string }) => a.name),
+      journal: p.venue || "",
+      year: p.year || 0,
+      doi: p.externalIds?.DOI || "",
+      abstract,
+      source: "Consensus",
+      keyFindings: extractKeyFindings(abstract),
+      researchGaps: extractResearchGaps(abstract),
+      futureResearch: extractFutureResearch(abstract),
+      authorLimitations: extractAuthorLimitations(abstract),
+    };
+  });
+}

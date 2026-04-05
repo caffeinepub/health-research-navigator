@@ -31,6 +31,7 @@ import {
 
 import {
   fetchArXiv,
+  fetchConsensus,
   fetchERIC,
   fetchEuropePMC,
   fetchGoogleScholar,
@@ -39,7 +40,10 @@ import {
   fetchSemanticScholar,
   fetchShodhganga,
 } from "./lib/fetchDatabases";
-import { generateResearchQuestions } from "./lib/searchUtils";
+import {
+  deduplicateStudies,
+  generateResearchQuestions,
+} from "./lib/searchUtils";
 
 import type {
   ClassifiedGap,
@@ -104,6 +108,12 @@ const DB_META: {
     accentClass: "text-orange-700",
     accentBg: "bg-orange-500",
   },
+  {
+    key: "consensus",
+    name: "Consensus (Evidence-Based)",
+    accentClass: "text-cyan-700",
+    accentBg: "bg-cyan-500",
+  },
 ];
 
 const EMPTY_RESULTS: SearchResults = {
@@ -115,6 +125,7 @@ const EMPTY_RESULTS: SearchResults = {
   eric: [],
   googleScholar: [],
   shodhganga: [],
+  consensus: [],
 };
 
 const IDLE_STATUS: DatabaseStatus = {
@@ -126,6 +137,7 @@ const IDLE_STATUS: DatabaseStatus = {
   eric: "idle",
   googleScholar: "idle",
   shodhganga: "idle",
+  consensus: "idle",
 };
 
 type Section = "search" | "synthesis" | "gaps" | "questions" | "objectives";
@@ -201,6 +213,7 @@ export default function App() {
       eric: "loading",
       googleScholar: "loading",
       shodhganga: "loading",
+      consensus: "loading",
     });
 
     const fetchers: [keyof SearchResults, Promise<Study[]>][] = [
@@ -212,6 +225,7 @@ export default function App() {
       ["eric", fetchERIC(query, yFrom, yTo)],
       ["googleScholar", fetchGoogleScholar(query, yFrom, yTo)],
       ["shodhganga", fetchShodhganga(query, yFrom, yTo)],
+      ["consensus", fetchConsensus(query, yFrom, yTo)],
     ];
 
     for (const [key, promise] of fetchers) {
@@ -279,7 +293,7 @@ export default function App() {
 
   // ── Generate Synthesis Table ──────────────────────────────────────────────────────
   const handleGenerateSynthesis = () => {
-    const allStudies = Object.values(results).flat();
+    const allStudies = deduplicatedStudies;
     const selected = allStudies.filter((s) => selectedIds.has(s.id));
     if (selected.length === 0) {
       toast.error("Please select at least one study.");
@@ -295,7 +309,7 @@ export default function App() {
 
   // ── Classify Gaps ──────────────────────────────────────────────────────────────────
   const handleClassifyGaps = () => {
-    const allStudies = Object.values(results).flat();
+    const allStudies = deduplicatedStudies;
     const selected = allStudies.filter((s) => selectedIds.has(s.id));
     const gaps = classifyStudies(selected);
     setClassifiedGaps(gaps);
@@ -550,7 +564,12 @@ export default function App() {
   const toggleSection = (s: Section) =>
     setOpenSection((prev) => (prev === s ? null : s));
 
-  const totalResults = Object.values(results).flat().length;
+  const allRawStudies = Object.values(results).flat();
+  const dedupeResult = deduplicateStudies(allRawStudies);
+  const deduplicatedStudies = dedupeResult.studies;
+  const totalResults = deduplicatedStudies.length;
+  const rawTotal = allRawStudies.length;
+  const duplicatesRemoved = dedupeResult.duplicatesRemoved;
   const currentYear = new Date().getFullYear();
 
   return (
@@ -783,7 +802,14 @@ export default function App() {
               </Button>
               {hasSearched && (
                 <span className="text-xs" style={{ color: "#444444" }}>
-                  {totalResults} total results
+                  {rawTotal} fetched · {totalResults} unique
+                  {duplicatesRemoved > 0 && (
+                    <span className="text-amber-700 font-medium">
+                      {" "}
+                      · {duplicatesRemoved} duplicate
+                      {duplicatesRemoved !== 1 ? "s" : ""} removed
+                    </span>
+                  )}
                 </span>
               )}
             </div>
@@ -836,7 +862,7 @@ export default function App() {
             >
               <SectionHeader
                 title="Search Results"
-                subtitle={`${totalResults} results across 8 databases · ${totalSelected} selected`}
+                subtitle={`${rawTotal} results fetched · ${totalResults} unique after deduplication · ${totalSelected} selected`}
                 icon={<Search className="w-4 h-4" />}
                 isOpen={openSection === "search"}
                 onToggle={() => toggleSection("search")}
@@ -845,6 +871,19 @@ export default function App() {
 
               {openSection === "search" && (
                 <div className="p-5">
+                  {/* Deduplication banner */}
+                  {hasSearched && duplicatesRemoved > 0 && (
+                    <div className="mb-4 px-4 py-2 rounded-lg border border-amber-300 bg-amber-50 flex flex-wrap items-center gap-2 text-sm text-amber-800">
+                      <span className="font-semibold">Deduplication:</span>
+                      {duplicatesRemoved} duplicate
+                      {duplicatesRemoved !== 1 ? "s" : ""} removed across
+                      databases &mdash; {totalResults} unique studies remain.
+                      <span className="text-amber-600 text-xs ml-1">
+                        (Same paper found in multiple databases is counted once)
+                      </span>
+                    </div>
+                  )}
+
                   {/* Global selection bar */}
                   {totalSelected > 0 && (
                     <div
@@ -871,20 +910,33 @@ export default function App() {
 
                   {/* Database panels */}
                   {DB_META.map((db) => (
-                    <DatabasePanel
-                      key={db.key}
-                      name={db.name}
-                      dbKey={db.key}
-                      studies={results[db.key]}
-                      status={dbStatus[db.key]}
-                      errorMsg={dbErrors[db.key]}
-                      selectedIds={selectedIds}
-                      onToggleSelect={toggleStudy}
-                      onSelectAll={() => selectAllFromDb(db.key)}
-                      onClearAll={() => clearAllFromDb(db.key)}
-                      accentClass={db.accentClass}
-                      accentBg={db.accentBg}
-                    />
+                    <div key={db.key}>
+                      <DatabasePanel
+                        name={db.name}
+                        dbKey={db.key}
+                        studies={results[db.key]}
+                        status={dbStatus[db.key]}
+                        errorMsg={dbErrors[db.key]}
+                        selectedIds={selectedIds}
+                        onToggleSelect={toggleStudy}
+                        onSelectAll={() => selectAllFromDb(db.key)}
+                        onClearAll={() => clearAllFromDb(db.key)}
+                        accentClass={db.accentClass}
+                        accentBg={db.accentBg}
+                      />
+                      {db.key === "consensus" && (
+                        <div className="text-xs text-center py-1">
+                          <a
+                            href={`https://consensus.app/results/?q=${encodeURIComponent(broadArea)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-cyan-700 underline hover:text-cyan-900"
+                          >
+                            Also open directly in Consensus.app ↗
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   ))}
 
                   {/* CrossRef sourcing note */}
