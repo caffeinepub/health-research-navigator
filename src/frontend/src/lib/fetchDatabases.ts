@@ -587,3 +587,194 @@ export async function fetchConsensus(
     };
   });
 }
+
+// ─── ClinicalTrials.gov ───────────────────────────────────────────────────────
+// ClinicalTrials.gov provides a public REST API v2 that supports CORS.
+export async function fetchClinicalTrials(
+  query: string,
+  yearFrom?: string,
+  yearTo?: string,
+): Promise<Study[]> {
+  const enc = encodeURIComponent(query);
+  const dateFilter = yearFrom
+    ? `&filter.overallStatus=RECRUITING,COMPLETED&filter.date=${yearFrom}-01-01,${yearTo || new Date().getFullYear()}-12-31`
+    : "";
+  const apiUrl = `https://clinicaltrials.gov/api/v2/studies?query.term=${enc}&pageSize=100&format=json${dateFilter}`;
+
+  let data: any = null;
+  try {
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(18000) });
+    if (res.ok) data = await res.json();
+  } catch {
+    /* try proxy fallback */
+  }
+
+  if (!data?.studies) {
+    try {
+      data = await fetchJsonViaProxy(apiUrl);
+    } catch {
+      console.warn("ClinicalTrials.gov: all methods failed");
+      return [];
+    }
+  }
+
+  const studies = data?.studies || [];
+  return studies.map((s: any) => {
+    const proto = s.protocolSection;
+    const id = proto?.identificationModule?.nctId || uid();
+    const title = proto?.identificationModule?.briefTitle || "No title";
+    const officialTitle = proto?.identificationModule?.officialTitle || title;
+    const abstract =
+      proto?.descriptionModule?.briefSummary ||
+      proto?.descriptionModule?.detailedDescription ||
+      "";
+    const conditions: string[] = proto?.conditionsModule?.conditions || [];
+    const interventions = (
+      proto?.armsInterventionsModule?.interventions || []
+    ).map((i: any) => i.name || "");
+    const investigators =
+      proto?.contactsLocationsModule?.overallOfficials || [];
+    const authors = investigators.length
+      ? investigators.map((o: any) => o.name || "").filter(Boolean)
+      : ["ClinicalTrials.gov"];
+    const startDate = proto?.statusModule?.startDateStruct?.date || "";
+    const year = startDate ? Number.parseInt(startDate.slice(0, 4)) || 0 : 0;
+    const sponsor = proto?.sponsorCollaboratorsModule?.leadSponsor?.name || "";
+    const phase = (proto?.designModule?.phases || []).join(", ");
+    const status = proto?.statusModule?.overallStatus || "";
+    const combinedAbstract = [
+      abstract,
+      conditions.length ? `Conditions: ${conditions.join(", ")}` : "",
+      interventions.length ? `Interventions: ${interventions.join(", ")}` : "",
+      phase ? `Phase: ${phase}` : "",
+      status ? `Status: ${status}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    return {
+      id: `ct-${id}`,
+      title: officialTitle || title,
+      authors,
+      journal: sponsor ? `Clinical Trial — ${sponsor}` : "ClinicalTrials.gov",
+      year,
+      doi: `NCT: ${id}`,
+      abstract: combinedAbstract,
+      source: "ClinicalTrials.gov",
+      keyFindings: extractKeyFindings(combinedAbstract),
+      researchGaps: extractResearchGaps(combinedAbstract),
+      futureResearch: extractFutureResearch(combinedAbstract),
+      authorLimitations: extractAuthorLimitations(combinedAbstract),
+    };
+  });
+}
+
+// ─── CTRI (Clinical Trials Registry – India) ─────────────────────────────────
+// CTRI has no public machine-readable API. We use Europe PMC to surface
+// registered Indian clinical trials mentioning the search terms, and display
+// a direct CTRI external search link alongside results.
+export async function fetchCTRI(
+  query: string,
+  yearFrom?: string,
+  yearTo?: string,
+): Promise<Study[]> {
+  const enc = encodeURIComponent(`${query} India clinical trial`);
+  const yearFilter = yearFrom
+    ? `&fromDate=${yearFrom}-01-01&toDate=${yearTo || new Date().getFullYear()}-12-31`
+    : "";
+  const apiUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${enc}&resultType=core&pageSize=50&format=json${yearFilter}`;
+
+  let data: any = null;
+  try {
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) });
+    if (res.ok) data = await res.json();
+  } catch {
+    /* ignore */
+  }
+
+  const results = data?.resultList?.result || [];
+  return results.map((r: any) => {
+    const abstract = r.abstractText || "";
+    return {
+      id: `ctri-${r.id || uid()}`,
+      title: r.title || "No title",
+      authors: r.authorString
+        ? r.authorString.split(",").map((a: string) => a.trim())
+        : [],
+      journal: r.journalTitle || "India Clinical Trial",
+      year: Number.parseInt(r.pubYear || "0") || 0,
+      volume: r.volume || "",
+      pages: r.pageInfo || "",
+      doi: r.doi || "",
+      abstract,
+      source: "CTRI (India)",
+      keyFindings: extractKeyFindings(abstract),
+      researchGaps: extractResearchGaps(abstract),
+      futureResearch: extractFutureResearch(abstract),
+      authorLimitations: extractAuthorLimitations(abstract),
+    };
+  });
+}
+
+// ─── scite.ai (via CrossRef with citation context) ──────────────────────────
+// scite.ai has no free public API. We use CrossRef to surface papers on the
+// topic (same corpus scite indexes) and display a direct scite.ai link.
+export async function fetchScite(
+  query: string,
+  yearFrom?: string,
+  yearTo?: string,
+): Promise<Study[]> {
+  const enc = encodeURIComponent(query);
+  const yearFilter = yearFrom
+    ? `&filter=from-pub-date:${yearFrom},until-pub-date:${yearTo || new Date().getFullYear()}`
+    : "";
+  const apiUrl = `https://api.crossref.org/works?query=${enc}&rows=100&select=DOI,title,author,published,container-title,volume,page,abstract,is-referenced-by-count${yearFilter}`;
+
+  let data: any = null;
+  try {
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(18000) });
+    if (res.ok) data = await res.json();
+  } catch {
+    console.warn("scite.ai (CrossRef): fetch failed");
+    return [];
+  }
+
+  const items = data?.message?.items || [];
+  return items.map((item: any) => {
+    const authors = (item.author || [])
+      .map((a: any) =>
+        `${a.family || ""}${a.given ? `, ${a.given}` : ""}`.trim(),
+      )
+      .filter(Boolean);
+    const year = item.published?.["date-parts"]?.[0]?.[0] || 0;
+    const rawAbstract = item.abstract || "";
+    const abstract = rawAbstract.replace(/<[^>]*>/g, "").trim();
+    const containerTitle = item["container-title"];
+    const journal = Array.isArray(containerTitle)
+      ? containerTitle[0] || ""
+      : containerTitle || "";
+    const titleVal = item.title;
+    const title = Array.isArray(titleVal)
+      ? titleVal[0] || "No title"
+      : titleVal || "No title";
+    const citationCount = item["is-referenced-by-count"] || 0;
+    return {
+      id: `scite-${uid()}`,
+      title,
+      authors,
+      journal,
+      year,
+      volume: item.volume || "",
+      pages: item.page || "",
+      doi: item.DOI || "",
+      abstract: abstract
+        ? `${abstract}${citationCount ? ` [Cited by: ${citationCount}]` : ""}`
+        : "",
+      source: "scite.ai (via CrossRef)",
+      keyFindings: extractKeyFindings(abstract),
+      researchGaps: extractResearchGaps(abstract),
+      futureResearch: extractFutureResearch(abstract),
+      authorLimitations: extractAuthorLimitations(abstract),
+    };
+  });
+}

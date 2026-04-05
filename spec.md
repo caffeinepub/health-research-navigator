@@ -1,34 +1,43 @@
 # Health Research Navigator
 
 ## Current State
-The app searches 8 databases in-app: PubMed (via Europe PMC SRC:MED), Semantic Scholar, OpenAlex, Europe PMC, ArXiv, ERIC, Google Scholar (via CrossRef), and Shodhganga (via CrossRef). All results are deduplicated by DOI then normalized title before evidence synthesis. The `SearchResults` and `DatabaseStatus` types enumerate all 8 database keys.
+The app has a year-of-publication filter toggle below the search box. Search results from all 12 databases are deduplicated. There is no study type filter yet.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Consensus database** (consensus.app) added to the search pipeline as the 9th database.
-- Since Consensus.app has no public API, it will be searched via the Semantic Scholar API with a `fieldsOfStudy=Medicine` filter and higher result count — the same underlying academic papers Consensus surfaces. A direct link to `https://consensus.app/results/?q=<encoded_query>` is included in the result panel header so users can also open the Consensus site directly with their query pre-filled.
-- `fetchConsensus()` function added to `fetchDatabases.ts`.
-- `consensus` key added to `SearchResults`, `DatabaseStatus`, and `DatabaseName` types in `study.ts`.
-- `consensus` entry added to `DB_META` in `App.tsx`.
-- `consensus` added to `EMPTY_RESULTS` and `IDLE_STATUS` constants.
-- `consensus` added to the `setDbStatus` call at search start and to the `fetchers` array.
-- `SOURCE_PRIORITY` in `searchUtils.ts` updated to include `consensus`.
+- Study type filter toggle (below or alongside the year filter) with the following options:
+  - All Study Types (default)
+  - Randomized Controlled Trial (RCT)
+  - Systematic Review
+  - Meta-Analysis
+  - Observational Study
+  - Cohort Study
+  - Case-Control Study
+  - Cross-Sectional Study
+  - Clinical Trial
+  - Qualitative Study
+  - Case Report / Case Series
+  - Review Article
+  - Guideline / Consensus Statement
+  - Dissertation / Thesis
+- Selected study type shows as a badge on the collapsed toggle
+- When a study type other than "All" is selected, filter the deduplicated results client-side by matching keywords in the title, abstract, or journal field
+- "All Study Types" option ensures no filtering is applied and all studies are shown
 
 ### Modify
-- Deduplication logic remains unchanged — Consensus results are merged into the same DOI/title-based dedup pool as all other databases.
+- The deduplicated results list should be further filtered by the selected study type before being passed to the results display and evidence synthesis
+- The deduplication stats banner should reflect the filtered count when a study type filter is active
 
 ### Remove
-- Nothing removed.
+- Nothing removed
 
 ## Implementation Plan
-1. Update `src/frontend/src/types/study.ts` to add `consensus` to `DatabaseName`, `SearchResults`, and `DatabaseStatus`.
-2. Add `fetchConsensus()` to `src/frontend/src/lib/fetchDatabases.ts` — uses Semantic Scholar API with `fieldsOfStudy=Medicine` and up to 100 results, maps to Study objects with `source: "Consensus"`.
-3. Update `src/frontend/src/lib/searchUtils.ts` — add `"consensus"` to `SOURCE_PRIORITY`.
-4. Update `src/frontend/src/App.tsx`:
-   - Add `consensus` import from fetchDatabases
-   - Add `consensus` to `DB_META`
-   - Add `consensus` to `EMPTY_RESULTS` and `IDLE_STATUS`
-   - Add `consensus` to `setDbStatus` at search start
-   - Add `["consensus", fetchConsensus(...)]` to `fetchers` array
-5. Validate and build.
+1. Add `studyTypeFilter` state (string, default "All")
+2. Add `studyTypeFilterOpen` boolean state
+3. Add the study type filter toggle UI below the year filter, matching the same style
+4. Define a `STUDY_TYPES` constant array with all options including "All Study Types"
+5. Add a `filterByStudyType(studies, studyType)` function that checks title + abstract + journal for study-type keywords
+6. Apply the filter after deduplication: `const filteredStudies = filterByStudyType(deduplicatedStudies, studyTypeFilter)`
+7. Use `filteredStudies` everywhere `deduplicatedStudies` was used for display, synthesis, and stats
+8. Show active filter badge on the toggle header

@@ -31,12 +31,15 @@ import {
 
 import {
   fetchArXiv,
+  fetchCTRI,
+  fetchClinicalTrials,
   fetchConsensus,
   fetchERIC,
   fetchEuropePMC,
   fetchGoogleScholar,
   fetchOpenAlex,
   fetchPubMed,
+  fetchScite,
   fetchSemanticScholar,
   fetchShodhganga,
 } from "./lib/fetchDatabases";
@@ -53,6 +56,113 @@ import type {
   Study,
   SynthesisRow,
 } from "./types/study";
+
+const STUDY_TYPES = [
+  "All Study Types",
+  "Randomized Controlled Trial (RCT)",
+  "Systematic Review",
+  "Meta-Analysis",
+  "Observational Study",
+  "Cohort Study",
+  "Case-Control Study",
+  "Cross-Sectional Study",
+  "Clinical Trial",
+  "Qualitative Study",
+  "Case Report / Case Series",
+  "Review Article",
+  "Guideline / Consensus Statement",
+  "Dissertation / Thesis",
+];
+
+const STUDY_TYPE_KEYWORDS: Record<string, string[]> = {
+  "Randomized Controlled Trial (RCT)": [
+    "randomized controlled trial",
+    "randomised controlled trial",
+    "rct",
+    "randomized trial",
+    "randomised trial",
+  ],
+  "Systematic Review": [
+    "systematic review",
+    "systematic literature review",
+    "scoping review",
+  ],
+  "Meta-Analysis": ["meta-analysis", "meta analysis", "pooled analysis"],
+  "Observational Study": [
+    "observational study",
+    "observational research",
+    "observational design",
+  ],
+  "Cohort Study": [
+    "cohort study",
+    "cohort analysis",
+    "prospective cohort",
+    "retrospective cohort",
+    "longitudinal study",
+  ],
+  "Case-Control Study": [
+    "case-control study",
+    "case control study",
+    "case-control design",
+  ],
+  "Cross-Sectional Study": [
+    "cross-sectional study",
+    "cross sectional study",
+    "cross-sectional survey",
+    "cross sectional survey",
+  ],
+  "Clinical Trial": [
+    "clinical trial",
+    "controlled trial",
+    "phase i",
+    "phase ii",
+    "phase iii",
+    "phase iv",
+    "nct",
+    "ctri",
+  ],
+  "Qualitative Study": [
+    "qualitative study",
+    "qualitative research",
+    "qualitative analysis",
+    "grounded theory",
+    "phenomenolog",
+    "ethnograph",
+  ],
+  "Case Report / Case Series": ["case report", "case series", "case study"],
+  "Review Article": [
+    "review article",
+    "narrative review",
+    "literature review",
+    "review of literature",
+  ],
+  "Guideline / Consensus Statement": [
+    "guideline",
+    "clinical guideline",
+    "consensus statement",
+    "practice guideline",
+    "recommendation",
+  ],
+  "Dissertation / Thesis": [
+    "dissertation",
+    "thesis",
+    "shodhganga",
+    "doctoral",
+    "phd thesis",
+  ],
+};
+
+function filterByStudyType(studies: Study[], studyType: string): Study[] {
+  if (studyType === "All Study Types") return studies;
+  const keywords = STUDY_TYPE_KEYWORDS[studyType] || [];
+  if (keywords.length === 0) return studies;
+  return studies.filter((s) => {
+    const searchText = [s.title, s.abstract, s.journal, s.source]
+      .join(" ")
+      .toLowerCase();
+    return keywords.some((kw) => searchText.includes(kw.toLowerCase()));
+  });
+}
 
 const DB_META: {
   key: keyof SearchResults;
@@ -114,6 +224,24 @@ const DB_META: {
     accentClass: "text-cyan-700",
     accentBg: "bg-cyan-500",
   },
+  {
+    key: "clinicalTrials",
+    name: "ClinicalTrials.gov",
+    accentClass: "text-rose-700",
+    accentBg: "bg-rose-500",
+  },
+  {
+    key: "ctri",
+    name: "CTRI – India",
+    accentClass: "text-lime-700",
+    accentBg: "bg-lime-500",
+  },
+  {
+    key: "scite",
+    name: "scite.ai",
+    accentClass: "text-violet-700",
+    accentBg: "bg-violet-500",
+  },
 ];
 
 const EMPTY_RESULTS: SearchResults = {
@@ -126,6 +254,9 @@ const EMPTY_RESULTS: SearchResults = {
   googleScholar: [],
   shodhganga: [],
   consensus: [],
+  clinicalTrials: [],
+  ctri: [],
+  scite: [],
 };
 
 const IDLE_STATUS: DatabaseStatus = {
@@ -138,6 +269,9 @@ const IDLE_STATUS: DatabaseStatus = {
   googleScholar: "idle",
   shodhganga: "idle",
   consensus: "idle",
+  clinicalTrials: "idle",
+  ctri: "idle",
+  scite: "idle",
 };
 
 type Section = "search" | "synthesis" | "gaps" | "questions" | "objectives";
@@ -165,6 +299,8 @@ export default function App() {
   const [yearFrom, setYearFrom] = useState("");
   const [yearTo, setYearTo] = useState("");
   const [yearFilterOpen, setYearFilterOpen] = useState(false);
+  const [studyTypeFilter, setStudyTypeFilter] = useState("All Study Types");
+  const [studyTypeFilterOpen, setStudyTypeFilterOpen] = useState(false);
 
   // Refine research question state
   const [selectedQuestion, setSelectedQuestion] = useState<string>("");
@@ -214,6 +350,9 @@ export default function App() {
       googleScholar: "loading",
       shodhganga: "loading",
       consensus: "loading",
+      clinicalTrials: "loading",
+      ctri: "loading",
+      scite: "loading",
     });
 
     const fetchers: [keyof SearchResults, Promise<Study[]>][] = [
@@ -226,6 +365,9 @@ export default function App() {
       ["googleScholar", fetchGoogleScholar(query, yFrom, yTo)],
       ["shodhganga", fetchShodhganga(query, yFrom, yTo)],
       ["consensus", fetchConsensus(query, yFrom, yTo)],
+      ["clinicalTrials", fetchClinicalTrials(query, yFrom, yTo)],
+      ["ctri", fetchCTRI(query, yFrom, yTo)],
+      ["scite", fetchScite(query, yFrom, yTo)],
     ];
 
     for (const [key, promise] of fetchers) {
@@ -293,7 +435,7 @@ export default function App() {
 
   // ── Generate Synthesis Table ──────────────────────────────────────────────────────
   const handleGenerateSynthesis = () => {
-    const allStudies = deduplicatedStudies;
+    const allStudies = filteredStudies;
     const selected = allStudies.filter((s) => selectedIds.has(s.id));
     if (selected.length === 0) {
       toast.error("Please select at least one study.");
@@ -309,7 +451,7 @@ export default function App() {
 
   // ── Classify Gaps ──────────────────────────────────────────────────────────────────
   const handleClassifyGaps = () => {
-    const allStudies = deduplicatedStudies;
+    const allStudies = filteredStudies;
     const selected = allStudies.filter((s) => selectedIds.has(s.id));
     const gaps = classifyStudies(selected);
     setClassifiedGaps(gaps);
@@ -533,7 +675,7 @@ export default function App() {
         <h1>Evidence Synthesis Report</h1>
         <p><strong>Broad Area:</strong> ${broadArea}</p>
         <p><strong>Date Generated:</strong> ${now}</p>
-        <p><strong>Databases Searched:</strong> PubMed, Semantic Scholar, OpenAlex, Europe PMC, ArXiv, ERIC, Google Scholar (via CrossRef), Shodhganga</p>
+        <p><strong>Databases Searched:</strong> PubMed, Semantic Scholar, OpenAlex, Europe PMC, ArXiv, ERIC, Google Scholar (via CrossRef), Shodhganga, Consensus, ClinicalTrials.gov, CTRI (India), scite.ai</p>
         ${synthesisTableHtml}
         ${gapsTableHtml}
         ${questionsTableHtml}
@@ -567,7 +709,11 @@ export default function App() {
   const allRawStudies = Object.values(results).flat();
   const dedupeResult = deduplicateStudies(allRawStudies);
   const deduplicatedStudies = dedupeResult.studies;
-  const totalResults = deduplicatedStudies.length;
+  const filteredStudies = filterByStudyType(
+    deduplicatedStudies,
+    studyTypeFilter,
+  );
+  const totalResults = filteredStudies.length;
   const rawTotal = allRawStudies.length;
   const duplicatesRemoved = dedupeResult.duplicatesRemoved;
   const currentYear = new Date().getFullYear();
@@ -620,9 +766,10 @@ export default function App() {
           </h2>
           <p className="text-sm max-w-lg mx-auto" style={{ color: "#333333" }}>
             Search PubMed, Semantic Scholar, OpenAlex, Europe PMC, ArXiv, ERIC,
-            Google Scholar, and Shodhganga simultaneously. Build an evidence
-            synthesis table, classify research gaps, and generate structured
-            research questions.
+            Google Scholar, Shodhganga, Consensus, ClinicalTrials.gov, CTRI
+            (India), and scite.ai simultaneously. Build an evidence synthesis
+            table, classify research gaps, and generate structured research
+            questions.
           </p>
         </div>
       </section>
@@ -638,7 +785,7 @@ export default function App() {
               Broad Area of Research
             </h3>
             <p className="text-white/60 text-xs mt-0.5">
-              Enter your topic and search all 8 databases simultaneously
+              Enter your topic and search all 12 databases simultaneously
             </p>
           </div>
 
@@ -781,6 +928,64 @@ export default function App() {
               )}
             </div>
 
+            {/* Study type filter toggle */}
+            <div
+              className="mt-3 border border-green-200 rounded-xl overflow-hidden"
+              style={{ backgroundColor: "#f1f8e9" }}
+            >
+              <button
+                type="button"
+                onClick={() => setStudyTypeFilterOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-green-100 transition-colors"
+                style={{ color: "#1b5e20" }}
+              >
+                <span>
+                  Filter by Study Type{" "}
+                  {studyTypeFilter !== "All Study Types"
+                    ? `(${studyTypeFilter})`
+                    : ""}
+                </span>
+                {studyTypeFilterOpen ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+              {studyTypeFilterOpen && (
+                <div className="px-4 pb-3 pt-2">
+                  <div className="flex flex-wrap gap-2">
+                    {STUDY_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setStudyTypeFilter(type)}
+                        className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${
+                          studyTypeFilter === type
+                            ? "bg-green-700 text-white border-green-700"
+                            : "bg-white border-green-300 hover:bg-green-50"
+                        }`}
+                        style={
+                          studyTypeFilter !== type ? { color: "#1b5e20" } : {}
+                        }
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                  {studyTypeFilter !== "All Study Types" && (
+                    <button
+                      type="button"
+                      onClick={() => setStudyTypeFilter("All Study Types")}
+                      className="mt-2 text-xs underline"
+                      style={{ color: "#888888" }}
+                    >
+                      Clear filter
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
                 onClick={handleSearch}
@@ -802,7 +1007,7 @@ export default function App() {
               </Button>
               {hasSearched && (
                 <span className="text-xs" style={{ color: "#444444" }}>
-                  {rawTotal} fetched · {totalResults} unique
+                  {rawTotal} fetched · {deduplicatedStudies.length} unique
                   {duplicatesRemoved > 0 && (
                     <span className="text-amber-700 font-medium">
                       {" "}
@@ -862,7 +1067,7 @@ export default function App() {
             >
               <SectionHeader
                 title="Search Results"
-                subtitle={`${rawTotal} results fetched · ${totalResults} unique after deduplication · ${totalSelected} selected`}
+                subtitle={`${rawTotal} fetched · ${deduplicatedStudies.length} unique · ${totalResults} shown${studyTypeFilter !== "All Study Types" ? ` (filtered: ${studyTypeFilter})` : ""} · ${totalSelected} selected`}
                 icon={<Search className="w-4 h-4" />}
                 isOpen={openSection === "search"}
                 onToggle={() => toggleSection("search")}
@@ -877,7 +1082,8 @@ export default function App() {
                       <span className="font-semibold">Deduplication:</span>
                       {duplicatesRemoved} duplicate
                       {duplicatesRemoved !== 1 ? "s" : ""} removed across
-                      databases &mdash; {totalResults} unique studies remain.
+                      databases &mdash; {deduplicatedStudies.length} unique
+                      studies remain.
                       <span className="text-amber-600 text-xs ml-1">
                         (Same paper found in multiple databases is counted once)
                       </span>
@@ -914,7 +1120,10 @@ export default function App() {
                       <DatabasePanel
                         name={db.name}
                         dbKey={db.key}
-                        studies={results[db.key]}
+                        studies={filterByStudyType(
+                          results[db.key],
+                          studyTypeFilter,
+                        )}
                         status={dbStatus[db.key]}
                         errorMsg={dbErrors[db.key]}
                         selectedIds={selectedIds}
@@ -933,6 +1142,42 @@ export default function App() {
                             className="text-cyan-700 underline hover:text-cyan-900"
                           >
                             Also open directly in Consensus.app ↗
+                          </a>
+                        </div>
+                      )}
+                      {db.key === "clinicalTrials" && (
+                        <div className="text-xs text-center py-1">
+                          <a
+                            href={`https://clinicaltrials.gov/search?term=${encodeURIComponent(broadArea)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-rose-700 underline hover:text-rose-900"
+                          >
+                            Also open directly in ClinicalTrials.gov ↗
+                          </a>
+                        </div>
+                      )}
+                      {db.key === "ctri" && (
+                        <div className="text-xs text-center py-1">
+                          <a
+                            href="https://ctri.nic.in/Clinicaltrials/advancesearchmain.php"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-lime-700 underline hover:text-lime-900"
+                          >
+                            Also open CTRI Advanced Search (India) ↗
+                          </a>
+                        </div>
+                      )}
+                      {db.key === "scite" && (
+                        <div className="text-xs text-center py-1">
+                          <a
+                            href={`https://scite.ai/search?q=${encodeURIComponent(broadArea)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-violet-700 underline hover:text-violet-900"
+                          >
+                            Also open directly in scite.ai ↗
                           </a>
                         </div>
                       )}
